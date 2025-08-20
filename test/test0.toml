@@ -1,0 +1,26 @@
+game_order = "1"
+game_description = "Having fun with these games!"
+
+[[game]]
+id = 1
+description = "The first game aims on practicing how to change working directory and look through files inside."
+available_command = ["ls", "cd", "echo"]
+environment = { dir = "set1", restore = true }
+
+[[game.game_item]]
+description = "Now you need to figure out what's inside the current directory!"
+hint = "You can use command 'ls' for lising all files and folders on the current dirctory!"
+hint_command = ["ls"]
+goal = { kind = "command_executed", expectation = ["ls", "ls -a"] }
+
+[[game.game_item]]
+description = "Enter the folder which has the longest name!"
+hint = "Using 'cd' command to change the dirctory where we are. e.g, 'cd a', where a is a folder."
+hint_command = ["cd"]
+goal = { kind = "dir_entered", expectation = ["./BITNP"]}  # assume the longest-name folder is BITNP
+
+[[game.game_item]]
+description = """Excellent! Let check if the file called "Miss. Shu Meiniang" is insided this foler! Then telling "true" or "false" to the terminal!"""
+hint = "For figuring out what's inside this dirctory, using 'ls'! To texting something to the terminal, using 'echo', like 'echo true'."
+hint_command = ["ls", "echo"]
+goal = { kind = "stdout", expectation = ["true"]}

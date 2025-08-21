@@ -1,4 +1,4 @@
-game_order = "1"
+game_order = [1]
 game_description = "Having fun with these games!"
 
 [[game]]

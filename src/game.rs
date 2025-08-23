@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, de};
 use std::fmt::Formatter;
@@ -6,9 +7,15 @@ use std::io;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::Path;
 use std::process::{Command, Output};
+use std::rc::Rc;
+use std::sync::Mutex;
 
 const EXIT_SYMBOL: &str = "exit";
 const HELP_SYMBOL: &str = "help";
+
+lazy_static! {
+    static ref COMMAND_HINTS: Mutex<Vec<CommandHint>> = Mutex::new(Vec::new());
+}
 
 #[derive(Deserialize)]
 struct Playground {
@@ -18,7 +25,7 @@ struct Playground {
     command_hints: Vec<CommandHint>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct CommandHint {
     name: String,
     hint: String,
@@ -86,7 +93,12 @@ impl Game {
             if game.hint_command.is_empty() {
                 println!("There's no hint!");
             } else {
+                for co in &game.hint_command {
+                    let guard = COMMAND_HINTS.lock().unwrap();
+                    let hint = guard.iter().find(|e| e.name.eq(co)).unwrap();
 
+                    println!("COMMAND: {}\nUSAGE: {}", hint.name, hint.hint);
+                }
             }
             loop {
                 io::stdout().flush().unwrap();
@@ -210,6 +222,8 @@ impl Playground {
                 format!("Failed to convert toml into Playground with error {e}"),
             )
         })?;
+        let mut guard = COMMAND_HINTS.lock().unwrap();
+        *guard = playground.command_hints.clone();
         Ok(playground)
     }
 }

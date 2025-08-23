@@ -1,6 +1,18 @@
 game_order = [1]
 game_description = "Having fun with these games!"
 
+[[command_hints]]
+name = "ls"
+hint = "List all files in the working dirctory"
+
+[[command_hints]]
+name = "cd"
+hint = "Change the working dirctory"
+
+[[command_hints]]
+name = "echo"
+hint = "Print something to the console"
+
 [[game]]
 id = 1
 description = "The first game aims on practicing how to change working directory and look through files inside."

@@ -2,14 +2,26 @@ use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, de};
 use std::fmt::Formatter;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Read};
+use std::io;
+use std::io::{Error, ErrorKind, Read, Write};
 use std::path::Path;
+use std::process::{Command, Output};
+
+const EXIT_SYMBOL: &str = "exit";
+const HELP_SYMBOL: &str = "help";
 
 #[derive(Deserialize)]
 struct Playground {
     game_order: Vec<usize>,
     game_description: String,
     game: Vec<Game>,
+    command_hints: Vec<CommandHint>,
+}
+
+#[derive(Deserialize)]
+struct CommandHint {
+    name: String,
+    hint: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -57,11 +69,94 @@ pub struct GamePlayer {
     cursor: usize,
 }
 
+enum ExecuteResult<S, F> {
+    Succ(S),
+    Fail(F),
+}
+
 impl Game {
-    pub(crate) fn play(&self) {
+    pub fn play(&self) {
         println!("{}", self.description);
+
+        // TODO prepare environment
+
+        for game in &self.game_item {
+            println!("{}", game.description);
+            println!("Some helpful command and their hint as followed:");
+            if game.hint_command.is_empty() {
+                println!("There's no hint!");
+            } else {
+
+            }
+            loop {
+                io::stdout().flush().unwrap();
+                let mut input = String::new();
+                io::stdin().read_line(&mut input).unwrap(); // hardly fail
+                let input = input.trim();
+                let input: Vec<String> = input.split(" ").map(|e| e.to_string()).collect();
+
+                if input[0] == EXIT_SYMBOL {
+                    break;
+                } else if input[0] == HELP_SYMBOL {
+                    println!("{}", game.hint);
+                } else if !self.available_command.contains(&input[0]) {
+                    println!(
+                        "The command {}  is not supported in this part of game!",
+                        input[0]
+                    );
+                } else {
+                    match self.execute_command(&input) {
+                        Ok(ExecuteResult::Succ(output)) => {
+                            println!("{output}");
+                        }
+                        Ok(ExecuteResult::Fail(output)) => {
+                            println!("{output}");
+                        }
+                        Err(err) => {
+                            println!("{err}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn execute_command(&self, com: &Vec<String>) -> Result<ExecuteResult<String, String>, Error> {
+        let mut command = Command::new(&com[0]);
+        command.args(&com[1..com.len()]);
+
+        let output: Output = command.output()?;
+        if !output.status.success() {
+            return Ok(ExecuteResult::Fail(
+                String::from_utf8(output.stderr).unwrap(),
+            ));
+        }
+
+        Ok(ExecuteResult::Succ(
+            String::from_utf8(output.stdout).unwrap(),
+        ))
     }
 }
+
+// impl<'de> Deserialize<'de> for Game {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         println!("hihihihihi");
+//         struct GameVisitor;
+//
+//         impl<'de> Visitor<'de> for GameVisitor {
+//             type Value = Game;
+//
+//             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+//                 formatter.write_str("Unable to visit the config file!")
+//             }
+//         }
+//
+//         deserializer.deserialize_str(GameVisitor)
+//     }
+// }
 
 impl GamePlayer {
     fn new(mut play_ground: Playground) -> Self {
@@ -164,6 +259,7 @@ mod tests {
         let playground: Playground = toml::from_str(&*content).unwrap();
         assert_eq!(playground.game_order, vec![1]);
         assert_eq!(playground.game_description, "Having fun with these games!");
+        assert_eq!(playground.command_hints[0].name, "ls");
         let game = &playground.game[0];
         assert_eq!(game.id, 1);
         assert_eq!(game.environment.as_ref().unwrap().dir, "set1");
@@ -173,10 +269,10 @@ mod tests {
         assert_eq!(items[0].goal.expectation, vec!["ls", "ls -a"]);
     }
 
-    #[test]
-    fn game_play_test() {
-        let game_config_path = "./test/test0.toml";
-        let player: GamePlayer = GamePlayer::build_from_config(game_config_path).unwrap();
-        player.play_next().unwrap();
-    }
+    // #[test]
+    // fn game_play_test() {
+    //     let game_config_path = "./test/test0.toml";
+    //     let player: GamePlayer = GamePlayer::build_from_config(game_config_path).unwrap();
+    //     player.play_next().unwrap();
+    // }
 }

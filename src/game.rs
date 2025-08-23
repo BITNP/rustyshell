@@ -120,15 +120,38 @@ impl Game {
                     match self.execute_command(&input) {
                         Ok(ExecuteResult::Succ(output)) => {
                             println!("{output}");
+                            if Self::judge_output(game, &input, output) {
+                                println!(
+                                    "Great! You have figured out this problem! Let's go to the next one!"
+                                );
+                                break;
+                            }
                         }
                         Ok(ExecuteResult::Fail(output)) => {
-                            println!("{output}");
+                            println!("There's something wrong: {output}");
                         }
                         Err(err) => {
                             println!("{err}")
                         }
                     }
                 }
+            }
+        }
+    }
+
+    fn judge_output(game_item: &GameItem, input: &Vec<String>, output: String) -> bool {
+        let goal = &game_item.goal;
+        let mut inp = String::new();
+        input.iter().for_each(|e| {
+            inp += &*e.clone();
+            inp += " ";
+        });
+        let inp = inp.trim().to_string();
+        match goal.kind {
+            GoalKind::CommandExecuted => goal.expectation.contains(&inp),
+            GoalKind::StdOut => goal.expectation[0] == output,
+            GoalKind::DirEntered => {
+                todo!()
             }
         }
     }

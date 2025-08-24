@@ -1,5 +1,4 @@
 use rustyshell::game::GamePlayer;
-use std::io::stdout;
 use std::path::PathBuf;
 use std::{env, io};
 

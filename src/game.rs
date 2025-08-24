@@ -1,19 +1,18 @@
+use crate::game::ExecuteResult::{Fail, Succ};
 use lazy_static::lazy_static;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, de};
 use std::fmt::Formatter;
 use std::fs::{DirEntry, File, FileType};
-use std::{env, fs, io};
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::rc::Rc;
 use std::sync::Mutex;
+use std::{env, fs, io};
 
 const EXIT_SYMBOL: &str = "exit";
 const HELP_SYMBOL: &str = "help";
 const TEMP_DIR_POSTFIX: &str = "__TEMP";
-const TESTS_SET: &str = "./tests_set";
 
 lazy_static! {
     static ref COMMAND_HINTS: Mutex<Vec<CommandHint>> = Mutex::new(Vec::new());
@@ -22,6 +21,7 @@ lazy_static! {
 #[derive(Deserialize)]
 struct Playground {
     game_order: Vec<usize>,
+    #[warn(dead_code)]
     game_description: String,
     game: Vec<Game>,
     command_hints: Vec<CommandHint>,
@@ -62,8 +62,6 @@ struct Goal {
     expectation: Vec<String>,
 }
 
-type Expectation = Vec<String>;
-
 #[derive(Debug, PartialEq, Clone)]
 enum GoalKind {
     CommandExecuted,
@@ -85,7 +83,6 @@ enum ExecuteResult<S, F> {
 
 impl Game {
     pub fn play(&self) {
-        let tests_set = TESTS_SET.to_string();
         println!("{}", self.description);
         let mut restore_path: Option<PathBuf> = None;
 
@@ -107,6 +104,7 @@ impl Game {
         for game in &self.game_item {
             println!("{}", game.description);
             println!("Some helpful command and their hint as followed:");
+
             if game.hint_command.is_empty() {
                 println!("There's no hint!");
             } else {
@@ -117,6 +115,7 @@ impl Game {
                     println!("COMMAND: {}\nUSAGE: {}", hint.name, hint.hint);
                 }
             }
+
             loop {
                 io::stdout().flush().unwrap();
                 let mut input = String::new();
@@ -130,9 +129,11 @@ impl Game {
                     println!("{}", game.hint);
                 } else if !self.available_command.contains(&input[0]) {
                     println!(
-                        "The command {}  is not supported in this part of game!",
+                        "The command {} is not supported at this part of game!",
                         input[0]
                     );
+                } else if input[0] == "\n" {
+                    continue;
                 } else {
                     match self.execute_command(&input) {
                         Ok(ExecuteResult::Succ(output)) => {
@@ -161,6 +162,10 @@ impl Game {
         }
     }
 
+    fn handle_cd(input: &Vec<String>) -> io::Result<()> {
+        Ok(())
+    }
+
     fn judge_output(game_item: &GameItem, input: &Vec<String>, output: String) -> bool {
         let goal = &game_item.goal;
         let mut inp = String::new();
@@ -169,20 +174,44 @@ impl Game {
             inp += " ";
         });
         let inp = inp.trim().to_string();
+
         match goal.kind {
             GoalKind::CommandExecuted => goal.expectation.contains(&inp),
             GoalKind::StdOut => goal.expectation[0] == output,
-            GoalKind::DirEntered => {
-                todo!()
-            }
+            GoalKind::DirEntered => env::current_dir()
+                .unwrap()
+                .ends_with(&game_item.goal.expectation[0]),
         }
     }
 
     fn execute_command(&self, com: &Vec<String>) -> Result<ExecuteResult<String, String>, Error> {
+        if com[0] == "cd" {
+            if com.len() == 1 {
+                // means the whole command is 'cd', which should get us to the home dir. We won't allow it
+                return Ok(Fail(String::from(
+                    "Enter the home dir is not allowed here!",
+                )));
+            } else if com[1].starts_with('/') {
+                return Ok(Fail(String::from(
+                    "Enter the root dir is not allowed here!",
+                )));
+            }
+            let path: PathBuf = env::current_dir()?;
+            let path = path.join(&com[1]);
+            env::set_current_dir(path)?;
+
+            return Ok(Succ(String::new()));
+        }
+
         let mut command = Command::new(&com[0]);
         command.args(&com[1..com.len()]);
 
-        let output: Output = command.output()?;
+        let mut output: Output = command.output()?;
+        // the output of 'echo hi' is actually 'hi\n'
+        let _ = output
+            .stdout
+            .pop_if(|e| com[0] == "echo" && *e == '\n' as u8);
+
         if !output.status.success() {
             return Ok(ExecuteResult::Fail(
                 String::from_utf8(output.stderr).unwrap(),
@@ -325,7 +354,7 @@ impl<'de> Deserialize<'de> for GoalKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::game::{GamePlayer, GoalKind, Playground};
+    use crate::game::{GoalKind, Playground};
     use std::fs::File;
     use std::io::Read;
 

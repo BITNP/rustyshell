@@ -2,16 +2,18 @@ use lazy_static::lazy_static;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, de};
 use std::fmt::Formatter;
-use std::fs::File;
-use std::io;
+use std::fs::{DirEntry, File, FileType};
+use std::{env, fs, io};
 use std::io::{Error, ErrorKind, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::rc::Rc;
 use std::sync::Mutex;
 
 const EXIT_SYMBOL: &str = "exit";
 const HELP_SYMBOL: &str = "help";
+const TEMP_DIR_POSTFIX: &str = "__TEMP";
+const TESTS_SET: &str = "./tests_set";
 
 lazy_static! {
     static ref COMMAND_HINTS: Mutex<Vec<CommandHint>> = Mutex::new(Vec::new());
@@ -83,9 +85,24 @@ enum ExecuteResult<S, F> {
 
 impl Game {
     pub fn play(&self) {
+        let tests_set = TESTS_SET.to_string();
         println!("{}", self.description);
+        let mut restore_path: Option<PathBuf> = None;
 
-        // TODO prepare environment
+        // TODO handle unwarps
+        // TODO try using a struct to handle directories
+        if let Some(environment) = &self.environment {
+            let curr_path = env::current_dir().unwrap();
+            let src = curr_path.join(&environment.dir);
+            env::set_current_dir(&src).unwrap();
+            if environment.restore {
+                println!("111");
+                let dst = curr_path.join(environment.dir.to_string() + TEMP_DIR_POSTFIX);
+                copy_dir_all(&src, &dst).unwrap();
+                env::set_current_dir(&dst).unwrap();
+                restore_path = Some(dst);
+            }
+        }
 
         for game in &self.game_item {
             println!("{}", game.description);
@@ -137,6 +154,11 @@ impl Game {
                 }
             }
         }
+
+        if let Some(path) = restore_path {
+            env::set_current_dir(path.join("..")).unwrap();
+            fs::remove_dir_all(&path).unwrap();
+        }
     }
 
     fn judge_output(game_item: &GameItem, input: &Vec<String>, output: String) -> bool {
@@ -173,12 +195,31 @@ impl Game {
     }
 }
 
+fn copy_dir_all<P: AsRef<Path>, PP: AsRef<Path>>(src: P, dst: PP) -> io::Result<()> {
+    if dst.as_ref().exists() {
+        fs::remove_dir_all(&dst)?;
+    }
+
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(&src)? {
+        let entry: DirEntry = entry?;
+        let ty: FileType = entry.file_type()?;
+        let target_path = dst.as_ref().join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &target_path)?;
+        } else {
+            fs::copy(entry.path(), target_path)?;
+        }
+    }
+
+    Ok(())
+}
+
 // impl<'de> Deserialize<'de> for Game {
 //     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 //     where
 //         D: Deserializer<'de>,
 //     {
-//         println!("hihihihihi");
 //         struct GameVisitor;
 //
 //         impl<'de> Visitor<'de> for GameVisitor {
@@ -290,7 +331,7 @@ mod tests {
 
     #[test]
     fn toml_parse_test() {
-        let mut test_file = File::open("./test/test0.toml").unwrap();
+        let mut test_file = File::open("../tests_set/test/test0.toml").unwrap();
         let mut content = String::new();
         test_file.read_to_string(&mut content).unwrap();
         let playground: Playground = toml::from_str(&*content).unwrap();

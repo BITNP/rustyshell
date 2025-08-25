@@ -1,0 +1,12 @@
+helpful_command_hint = "一些有用的指令："
+empty_command_hint = "没有任何提示！"
+word_command = "指令："
+word_usage = "用法："
+pass_the_game_item = "太棒了！你通过了这部分游戏，让我们继续！"
+diasllow_home_dir = "不允许进入家目录！"
+diasllow_root_dir = "不允许进入根目录！"
+pass_all_game = "你通过了全部游戏！"
+
+[messages]
+command_not_supported = "这部分游戏不允许使用指令 %{command_name}"
+command_execute_failed = "好像出错了： %{output}"

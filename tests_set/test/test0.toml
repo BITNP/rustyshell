@@ -1,5 +1,6 @@
 #game_order = [0, 1]
-game_order = [1, 0]
+#game_order = [1, 0]
+game_order = [2, 1, 0]
 game_description = "Having fun with these games!"
 
 [[command_hints]]
@@ -30,22 +31,34 @@ goal = { kind = "command_executed", expectation = ["ls", "ls -a"] }
 description = "Enter the folder which has the longest name!"
 hint = "Using 'cd' command to change the dirctory where we are. e.g, 'cd a', where a is a folder."
 hint_command = ["cd"]
-goal = { kind = "dir_entered", expectation = ["BITNP"]}  # assume the longest-name folder is BITNP
+goal = { kind = "dir_entered", expectation = ["BITNP"] }  # assume the longest-name folder is BITNP
 
 [[game.game_item]]
 description = """Excellent! Let check if the file called "Miss. Shu Meiniang" is inside of this foler! Then telling "true" or "false" to the terminal!"""
 hint = "For figuring out what's inside this dirctory, using 'ls'! To texting something to the terminal, using 'echo', like 'echo true'."
 hint_command = ["ls", "echo"]
-goal = { kind = "stdout", expectation = ["true"]}
+goal = { kind = "stdout", expectation = ["true"] }
 
 [[game]]
 id = 1
 description = "The second game aims on ONNNNNNNNNNNN."
-available_command = ["ls", "cd", "echo"]
+available_command = ["echo"]
 #environment = { dir = "set1", restore = true }
 
 [[game.game_item]]
 description = "Try to print a 'word' to terminal!"
 hint = "To texting something to the terminal, using 'echo', like 'echo true'."
 hint_command = []
-goal = { kind = "stdout", expectation = ["word"]}
+goal = { kind = "stdout", expectation = ["word"] }
+
+[[game]]
+id = 2
+description = "Test cd"
+available_command = []
+environment = { dir = "set1", restore = true }
+
+[[game.game_item]]
+description = "Test"
+hint = ""
+hint_command = []
+goal = { kind = "stdout", expectation = ["word"] } # never success

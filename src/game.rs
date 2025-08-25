@@ -2,6 +2,7 @@ use crate::game::ExecuteResult::{Fail, Succ};
 use lazy_static::lazy_static;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, de};
+use std::collections::VecDeque;
 use std::fmt::Formatter;
 use std::fs::{DirEntry, File, FileType};
 use std::io::{Error, ErrorKind, Read, Write};
@@ -85,24 +86,28 @@ impl Game {
     pub fn play(&self) {
         println!("{}", self.description);
         let mut restore_path: Option<PathBuf> = None;
+        let mut root_path = env::current_dir().unwrap();
 
         // TODO handle unwarps
         // TODO try using a struct to handle directories
         if let Some(environment) = &self.environment {
-            let curr_path = env::current_dir().unwrap();
-            let src = curr_path.join(&environment.dir);
-            env::set_current_dir(&src).unwrap();
+            let src = root_path.join(&environment.dir);
             if environment.restore {
-                let dst = curr_path.join(environment.dir.to_string() + TEMP_DIR_POSTFIX);
+                let dst = root_path.join(environment.dir.to_string() + TEMP_DIR_POSTFIX);
                 copy_dir_all(&src, &dst).unwrap();
                 env::set_current_dir(&dst).unwrap();
-                restore_path = Some(dst);
+                restore_path = Some(dst.clone());
+                root_path = dst;
+            } else {
+                env::set_current_dir(&src).unwrap();
+                root_path = src;
             }
         }
 
         for game in &self.game_item {
             println!("{}", game.description);
             println!("{}", t!("helpful_command_hint"));
+            let free_mode = self.available_command.len() == 0; // if there's no restrict, do everything you want
 
             if game.hint_command.is_empty() {
                 println!("{}", t!("empty_command_hint"));
@@ -135,13 +140,13 @@ impl Game {
                 } else if input[0] == "" {
                     // means user types Enter
                     continue;
-                } else if !self.available_command.contains(&input[0]) {
+                } else if !self.available_command.contains(&input[0]) && !free_mode {
                     println!(
                         "{}",
                         t!("messages.command_not_supported", command_name = input[0])
                     )
                 } else {
-                    match self.execute_command(&input) {
+                    match self.execute_command(&input, &root_path) {
                         Ok(Succ(output)) => {
                             println!("{output}");
                             if Self::judge_output(game, &input, output) {
@@ -184,7 +189,11 @@ impl Game {
         }
     }
 
-    fn execute_command(&self, com: &Vec<String>) -> Result<ExecuteResult<String, String>, Error> {
+    fn execute_command(
+        &self,
+        com: &Vec<String>,
+        root: &PathBuf,
+    ) -> Result<ExecuteResult<String, String>, Error> {
         if com[0] == "cd" {
             if com.len() == 1 {
                 // means the whole command is 'cd', which should get us to the home dir. We won't allow it
@@ -192,9 +201,24 @@ impl Game {
             } else if com[1].starts_with('/') {
                 return Ok(Fail(String::from(t!("disallow_root_dir"))));
             }
-            let path: PathBuf = env::current_dir()?;
-            let path = path.join(&com[1]);
-            env::set_current_dir(path)?;
+            let mut path: PathBuf = env::current_dir()?;
+            let mut src: VecDeque<&str> = com[1].split("/").collect();
+            while let Some(e) = src.pop_front() {
+                match e {
+                    "." => (),
+                    ".." => {
+                        let _ = path.pop();
+                    }
+                    es => path = path.join(es),
+                }
+            }
+
+            if root.starts_with(&path) {
+                println!("{}", t!("get_back_from_bound"));
+                env::set_current_dir(root)?;
+            } else {
+                env::set_current_dir(path)?;
+            }
 
             return Ok(Succ(String::new()));
         }

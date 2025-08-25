@@ -1,0 +1,12 @@
+helpful_command_hint = "Some helpful command as followed:"
+empty_command_hint = "There's no hint!"
+word_command = "COMMAND:"
+word_usage = "USAGE:"
+pass_the_game_item = "Great! You've passed this part of game! Let's go to the next one!"
+diasllow_home_dir = "Entering the home dir is not allowed here!"
+diasllow_root_dir = "Entering the root dir is not allowed here!"
+pass_all_game = "You've passed all the game!"
+
+[messages]
+command_not_supported = "The command %{command_name} is not supported at this part of game!"
+command_execute_failed = "There's something wrong: %{output}"

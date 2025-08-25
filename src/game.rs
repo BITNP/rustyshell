@@ -93,7 +93,6 @@ impl Game {
             let src = curr_path.join(&environment.dir);
             env::set_current_dir(&src).unwrap();
             if environment.restore {
-                println!("111");
                 let dst = curr_path.join(environment.dir.to_string() + TEMP_DIR_POSTFIX);
                 copy_dir_all(&src, &dst).unwrap();
                 env::set_current_dir(&dst).unwrap();
@@ -103,16 +102,22 @@ impl Game {
 
         for game in &self.game_item {
             println!("{}", game.description);
-            println!("Some helpful command and their hint as followed:");
+            println!("{}", t!("helpful_command_hint"));
 
             if game.hint_command.is_empty() {
-                println!("There's no hint!");
+                println!("{}", t!("empty_command_hint"));
             } else {
                 for co in &game.hint_command {
                     let guard = COMMAND_HINTS.lock().unwrap();
                     let hint = guard.iter().find(|e| e.name.eq(co)).unwrap();
 
-                    println!("COMMAND: {}\nUSAGE: {}", hint.name, hint.hint);
+                    println!(
+                        "{} {}\n{} {}",
+                        t!("word_command"),
+                        hint.name,
+                        t!("word_usage"),
+                        hint.hint
+                    );
                 }
             }
 
@@ -127,26 +132,25 @@ impl Game {
                     break;
                 } else if input[0] == HELP_SYMBOL {
                     println!("{}", game.hint);
+                } else if input[0] == "" {
+                    // means user types Enter
+                    continue;
                 } else if !self.available_command.contains(&input[0]) {
                     println!(
-                        "The command {} is not supported at this part of game!",
-                        input[0]
-                    );
-                } else if input[0] == "\n" {
-                    continue;
+                        "{}",
+                        t!("messages.command_not_supported", command_name = input[0])
+                    )
                 } else {
                     match self.execute_command(&input) {
-                        Ok(ExecuteResult::Succ(output)) => {
+                        Ok(Succ(output)) => {
                             println!("{output}");
                             if Self::judge_output(game, &input, output) {
-                                println!(
-                                    "Great! You have figured out this problem! Let's go to the next one!"
-                                );
+                                println!("{}", t!("pass_the_game_item"));
                                 break;
                             }
                         }
-                        Ok(ExecuteResult::Fail(output)) => {
-                            println!("There's something wrong: {output}");
+                        Ok(Fail(output)) => {
+                            println!("{}", t!("messages.command_execute_failed", output = output));
                         }
                         Err(err) => {
                             println!("{err}")
@@ -160,10 +164,6 @@ impl Game {
             env::set_current_dir(path.join("..")).unwrap();
             fs::remove_dir_all(&path).unwrap();
         }
-    }
-
-    fn handle_cd(input: &Vec<String>) -> io::Result<()> {
-        Ok(())
     }
 
     fn judge_output(game_item: &GameItem, input: &Vec<String>, output: String) -> bool {
@@ -188,13 +188,9 @@ impl Game {
         if com[0] == "cd" {
             if com.len() == 1 {
                 // means the whole command is 'cd', which should get us to the home dir. We won't allow it
-                return Ok(Fail(String::from(
-                    "Enter the home dir is not allowed here!",
-                )));
+                return Ok(Fail(String::from(t!("disallow_home_dir"))));
             } else if com[1].starts_with('/') {
-                return Ok(Fail(String::from(
-                    "Enter the root dir is not allowed here!",
-                )));
+                return Ok(Fail(String::from(t!("disallow_root_dir"))));
             }
             let path: PathBuf = env::current_dir()?;
             let path = path.join(&com[1]);
@@ -213,14 +209,10 @@ impl Game {
             .pop_if(|e| com[0] == "echo" && *e == '\n' as u8);
 
         if !output.status.success() {
-            return Ok(ExecuteResult::Fail(
-                String::from_utf8(output.stderr).unwrap(),
-            ));
+            return Ok(Fail(String::from_utf8(output.stderr).unwrap()));
         }
 
-        Ok(ExecuteResult::Succ(
-            String::from_utf8(output.stdout).unwrap(),
-        ))
+        Ok(Succ(String::from_utf8(output.stdout).unwrap()))
     }
 }
 
@@ -266,7 +258,7 @@ fn copy_dir_all<P: AsRef<Path>, PP: AsRef<Path>>(src: P, dst: PP) -> io::Result<
 impl GamePlayer {
     fn new(mut play_ground: Playground) -> Self {
         let len = *play_ground.game_order.iter().max().unwrap_or(&0) + 1;
-        let mut games = vec![None; len + 1];
+        let mut games = vec![None; len];
         for e in play_ground.game.drain(..) {
             let index = e.id;
             games[index] = Some(e);
@@ -285,7 +277,7 @@ impl GamePlayer {
         Ok(Self::new(playground))
     }
 
-    pub fn play_next(&self) -> Result<(), Error> {
+    pub fn play_next(&mut self) -> Result<(), Error> {
         if self.cursor >= self.len {
             return Err(Error::new(ErrorKind::Other, "Already reach the end!"));
         }
@@ -293,6 +285,7 @@ impl GamePlayer {
         let index = self.play_ground.game_order[self.cursor];
         if let Some(Some(game)) = self.games.get(index) {
             game.play();
+            self.cursor += 1;
         } else {
             return Err(Error::new(
                 ErrorKind::Other,

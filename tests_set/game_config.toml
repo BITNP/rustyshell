@@ -1,4 +1,4 @@
-game_order = [1]
+game_order = [0]
 game_description = "欢迎使用北理网协2025百团招新终端操作小游戏！"
 
 [[command_hints]]
@@ -14,7 +14,7 @@ name = "echo"
 hint = "向终端打印文字"
 
 [[game]]
-id = 1
+id = 0
 description = "第一个游戏用于练习查看目录中的文件以及目录间切换"
 available_command = ["ls", "cd", "echo"]
 environment = { dir = "set1", restore = true }

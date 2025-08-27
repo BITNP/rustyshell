@@ -3,13 +3,20 @@ name = "rustyshell"
 version = "0.1.0"
 edition = "2024"
 
+[package.metadata]
+language = "zh-CN"
+
 [dependencies]
 toml = "0.9.5"
 serde = { version = "1.0", features = ["derive"] }
 lazy_static = "1.5.0"
 rust-i18n = "3.1.5"
+chrono = "0.4.41"
 
 [package.metadata.i18n]
 available-locales = ["zh-CN", "en"]
 default-locale = "zh-CN"
 minify-key = true
+
+[build-dependencies]
+cargo_metadata = "0.22.0"

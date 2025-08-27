@@ -1,7 +1,7 @@
-use rust_i18n::{i18n, t};
+use rust_i18n::t;
 use rustyshell::game::GamePlayer;
 use std::path::PathBuf;
-use std::{env, io};
+use std::{env, fs, io};
 
 rust_i18n::i18n!("i18n");
 
@@ -11,7 +11,10 @@ fn main() -> io::Result<()> {
 
     let mut working_path: PathBuf = env::current_dir()?;
     working_path.push("./tests_set");
-    env::set_current_dir(working_path)?;
+    if !working_path.exists() {
+        fs::create_dir(&working_path)?;
+    }
+    env::set_current_dir(&working_path)?;
 
     #[cfg(debug_assertions)]
     let game_config_path = "./test/test0.toml";

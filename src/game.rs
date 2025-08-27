@@ -1,8 +1,9 @@
 use crate::game::ExecuteResult::{Fail, Succ};
+use chrono::Utc;
 use lazy_static::lazy_static;
-use serde::de::Visitor;
+use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, de};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Formatter;
 use std::fs::{DirEntry, File, FileType};
 use std::io::{Error, ErrorKind, Read, Write};
@@ -17,6 +18,18 @@ const TEMP_DIR_POSTFIX: &str = "__TEMP";
 
 lazy_static! {
     static ref COMMAND_HINTS: Mutex<Vec<CommandHint>> = Mutex::new(Vec::new());
+    static ref BUILDIN_VARIABLE: HashMap<String, Box<dyn Fn() -> String + Sync + Send>> = {
+        let mut map: HashMap<String, Box<dyn Fn() -> String + Sync + Send>> = HashMap::new();
+        map.insert(
+            String::from("$YYYY-MM-DD$"),
+            Box::new(|| {
+                let time = Utc::now();
+                time.format("%Y-%m-%d").to_string()
+            }),
+        );
+
+        map
+    };
 }
 
 #[derive(Deserialize)]
@@ -57,10 +70,13 @@ struct Environment {
     restore: bool,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Clone)]
+struct Expectation(pub Vec<String>);
+
+#[derive(Clone, Deserialize)]
 struct Goal {
     kind: GoalKind,
-    expectation: Vec<String>,
+    expectation: Expectation,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -114,20 +130,22 @@ impl Game {
             } else {
                 for co in &game.hint_command {
                     let guard = COMMAND_HINTS.lock().unwrap();
-                    let hint = guard.iter().find(|e| e.name.eq(co)).unwrap();
-
-                    println!(
-                        "{} {}\n{} {}",
-                        t!("word_command"),
-                        hint.name,
-                        t!("word_usage"),
-                        hint.hint
-                    );
+                    if let Some(hint) = guard.iter().find(|e| e.name.eq(co)) {
+                        println!(
+                            "{} {}\n{} {}",
+                            t!("word_command"),
+                            hint.name,
+                            t!("word_usage"),
+                            hint.hint
+                        );
+                    }
                 }
             }
 
             loop {
+                print!("$ ");
                 io::stdout().flush().unwrap();
+
                 let mut input = String::new();
                 io::stdin().read_line(&mut input).unwrap(); // hardly fail
                 let input = input.trim();
@@ -181,11 +199,11 @@ impl Game {
         let inp = inp.trim().to_string();
 
         match goal.kind {
-            GoalKind::CommandExecuted => goal.expectation.contains(&inp),
-            GoalKind::StdOut => goal.expectation[0] == output,
+            GoalKind::CommandExecuted => goal.expectation.0.contains(&inp),
+            GoalKind::StdOut => goal.expectation.0[0] == output,
             GoalKind::DirEntered => env::current_dir()
                 .unwrap()
-                .ends_with(&game_item.goal.expectation[0]),
+                .ends_with(&game_item.goal.expectation.0[0]),
         }
     }
 
@@ -213,7 +231,7 @@ impl Game {
                 }
             }
 
-            if root.starts_with(&path) {
+            if root.starts_with(&path) && root != &path {
                 println!("{}", t!("get_back_from_bound"));
                 env::set_current_dir(root)?;
             } else {
@@ -259,25 +277,6 @@ fn copy_dir_all<P: AsRef<Path>, PP: AsRef<Path>>(src: P, dst: PP) -> io::Result<
 
     Ok(())
 }
-
-// impl<'de> Deserialize<'de> for Game {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         struct GameVisitor;
-//
-//         impl<'de> Visitor<'de> for GameVisitor {
-//             type Value = Game;
-//
-//             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-//                 formatter.write_str("Unable to visit the config file!")
-//             }
-//         }
-//
-//         deserializer.deserialize_str(GameVisitor)
-//     }
-// }
 
 impl GamePlayer {
     fn new(mut play_ground: Playground) -> Self {
@@ -343,9 +342,9 @@ impl<'de> Deserialize<'de> for GoalKind {
     where
         D: Deserializer<'de>,
     {
-        struct GoalVisitor;
+        struct GoalKindVisitor;
 
-        impl<'de> Visitor<'de> for GoalVisitor {
+        impl<'de> Visitor<'de> for GoalKindVisitor {
             type Value = GoalKind;
 
             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -365,9 +364,95 @@ impl<'de> Deserialize<'de> for GoalKind {
             }
         }
 
-        deserializer.deserialize_str(GoalVisitor)
+        deserializer.deserialize_str(GoalKindVisitor)
     }
 }
+
+impl<'de> Deserialize<'de> for Expectation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ExpectationVisitor;
+
+        impl<'de> Visitor<'de> for ExpectationVisitor {
+            type Value = Expectation;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("a sequence of string needed!")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut expectations = Vec::new();
+                while let Some(ele) = seq.next_element::<String>()? {
+                    match &*ele {
+                        "$YYYY-MM-DD$" => {
+                            let time = Utc::now();
+                            expectations.push(time.format("%Y-%m-%d").to_string());
+                        }
+                        _ => {
+                            expectations.push(ele);
+                        }
+                    }
+                }
+
+                Ok(Expectation(expectations))
+            }
+        }
+
+        deserializer.deserialize_str(ExpectationVisitor)
+    }
+}
+
+// impl<'de> Deserialize<'de> for Goal {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         struct GoalVisitor;
+//
+//         impl<'de> Visitor<'de> for GoalVisitor {
+//             type Value = Goal;
+//
+//             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+//                 formatter.write_str("Any valid Goal!")
+//             }
+//
+//             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+//             where
+//                 A: MapAccess<'de>,
+//             {
+//                 let mut kind = None;
+//                 let mut expectation = None;
+//
+//                 while let Some(key) = map.next_key::<String>()? {
+//                     match key.as_str() {
+//                         "kind" => {
+//                             kind = Some(map.next_value::<GoalKind>()?);
+//                         }
+//                         "expectation" => {
+//                             expectation = Some(map.next_value::<Vec<String>>()?)
+//                         }
+//                         _ => {
+//                             let _ = map.next_value::<de::IgnoredAny>();
+//                         }
+//                     }
+//                 }
+//
+//                 Ok(Goal {
+//                     kind: kind.unwrap(),
+//                     expectation: expectation.unwrap(),
+//                 })
+//             }
+//
+//         }
+//
+//         deserializer.deserialize_str(GoalVisitor)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -390,7 +475,7 @@ mod tests {
         let items = &game.game_item;
         assert_eq!(items[0].hint_command, vec!["ls"]);
         assert_eq!(items[0].goal.kind, GoalKind::CommandExecuted);
-        assert_eq!(items[0].goal.expectation, vec!["ls", "ls -a"]);
+        assert_eq!(items[0].goal.expectation.0, vec!["ls", "ls -a"]);
     }
 
     // #[test]

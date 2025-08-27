@@ -13,10 +13,14 @@ hint = "改变工作目录"
 name = "echo"
 hint = "向终端打印文字"
 
+[[commmand_hints]]
+name = "pwd"
+hint = "Print working directory"
+
 [[game]]
 id = 0
 description = "第一个游戏用于练习查看目录中的文件以及目录间切换"
-available_command = ["ls", "cd", "echo"]
+available_command = ["ls", "cd", "echo", "pwd"]
 environment = { dir = "set1", restore = true }
 
 [[game.game_item]]

@@ -1,6 +1,6 @@
 #game_order = [0, 1]
 #game_order = [1, 0]
-game_order = [2, 1, 0]
+game_order = [3, 1, 0, 2]
 game_description = "Having fun with these games!"
 
 [[command_hints]]
@@ -62,3 +62,15 @@ description = "Test"
 hint = ""
 hint_command = []
 goal = { kind = "stdout", expectation = ["word"] } # never success
+
+[[game]]
+id = 3
+description = "py and java"
+available_command = ["python", "java", "gcc", "cargo", "echo"]
+environment = { dir = "set2", restore = true }
+
+[[game.game_item]]
+description = "python"
+hint = ""
+hint_command = ["python"]
+goal = { kind = "stdout", expectation = ["$YYYY-MM-DD$"] }

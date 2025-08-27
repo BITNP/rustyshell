@@ -41,6 +41,23 @@ struct Playground {
     command_hints: Vec<CommandHint>,
 }
 
+impl Playground {
+    pub fn build<P: AsRef<Path>>(config_path: P) -> Result<Self, Error> {
+        let mut file = File::open(config_path)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
+        let playground: Playground = toml::from_str(&*content).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("Failed to convert toml into Playground with error {e}"),
+            )
+        })?;
+        let mut guard = COMMAND_HINTS.lock().unwrap();
+        *guard = playground.command_hints.clone();
+        Ok(playground)
+    }
+}
+
 #[derive(Deserialize, Clone)]
 struct CommandHint {
     name: String,
@@ -54,48 +71,6 @@ struct Game {
     available_command: Vec<String>,
     environment: Option<Environment>,
     game_item: Vec<GameItem>,
-}
-
-#[derive(Deserialize, Clone)]
-struct GameItem {
-    description: String,
-    hint: String,
-    hint_command: Vec<String>,
-    goal: Goal,
-}
-
-#[derive(Deserialize, Clone)]
-struct Environment {
-    dir: String,
-    restore: bool,
-}
-
-#[derive(Clone)]
-struct Expectation(pub Vec<String>);
-
-#[derive(Clone, Deserialize)]
-struct Goal {
-    kind: GoalKind,
-    expectation: Expectation,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum GoalKind {
-    CommandExecuted,
-    DirEntered,
-    StdOut,
-}
-
-pub struct GamePlayer {
-    play_ground: Playground,
-    games: Vec<Option<Game>>,
-    len: usize,
-    cursor: usize,
-}
-
-enum ExecuteResult<S, F> {
-    Succ(S),
-    Fail(F),
 }
 
 impl Game {
@@ -258,24 +233,111 @@ impl Game {
     }
 }
 
-fn copy_dir_all<P: AsRef<Path>, PP: AsRef<Path>>(src: P, dst: PP) -> io::Result<()> {
-    if dst.as_ref().exists() {
-        fs::remove_dir_all(&dst)?;
-    }
+#[derive(Deserialize, Clone)]
+struct GameItem {
+    description: String,
+    hint: String,
+    hint_command: Vec<String>,
+    goal: Goal,
+}
 
-    fs::create_dir_all(&dst)?;
-    for entry in fs::read_dir(&src)? {
-        let entry: DirEntry = entry?;
-        let ty: FileType = entry.file_type()?;
-        let target_path = dst.as_ref().join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_all(&entry.path(), &target_path)?;
-        } else {
-            fs::copy(entry.path(), target_path)?;
+#[derive(Deserialize, Clone)]
+struct Environment {
+    dir: String,
+    restore: bool,
+}
+
+#[derive(Clone)]
+struct Expectation(pub Vec<String>);
+
+impl<'de> Deserialize<'de> for Expectation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ExpectationVisitor;
+
+        impl<'de> Visitor<'de> for ExpectationVisitor {
+            type Value = Expectation;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("a sequence of string needed!")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut expectations = Vec::new();
+                while let Some(ele) = seq.next_element::<String>()? {
+                    match &*ele {
+                        "$YYYY-MM-DD$" => {
+                            let time = Utc::now();
+                            expectations.push(time.format("%Y-%m-%d").to_string());
+                        }
+                        _ => {
+                            expectations.push(ele);
+                        }
+                    }
+                }
+
+                Ok(Expectation(expectations))
+            }
         }
-    }
 
-    Ok(())
+        deserializer.deserialize_str(ExpectationVisitor)
+    }
+}
+
+#[derive(Clone, Deserialize)]
+struct Goal {
+    kind: GoalKind,
+    expectation: Expectation,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum GoalKind {
+    CommandExecuted,
+    DirEntered,
+    StdOut,
+}
+
+impl<'de> Deserialize<'de> for GoalKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct GoalKindVisitor;
+
+        impl<'de> Visitor<'de> for GoalKindVisitor {
+            type Value = GoalKind;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("Any valid GoalKind!")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match v {
+                    "command_executed" => Ok(GoalKind::CommandExecuted),
+                    "dir_entered" => Ok(GoalKind::DirEntered),
+                    "stdout" => Ok(GoalKind::StdOut),
+                    _ => Err(de::Error::custom("Not a valid goal kind!")),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(GoalKindVisitor)
+    }
+}
+
+pub struct GamePlayer {
+    play_ground: Playground,
+    games: Vec<Option<Game>>,
+    len: usize,
+    cursor: usize,
 }
 
 impl GamePlayer {
@@ -320,91 +382,29 @@ impl GamePlayer {
     }
 }
 
-impl Playground {
-    pub fn build<P: AsRef<Path>>(config_path: P) -> Result<Self, Error> {
-        let mut file = File::open(config_path)?;
-        let mut content = String::new();
-        file.read_to_string(&mut content)?;
-        let playground: Playground = toml::from_str(&*content).map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("Failed to convert toml into Playground with error {e}"),
-            )
-        })?;
-        let mut guard = COMMAND_HINTS.lock().unwrap();
-        *guard = playground.command_hints.clone();
-        Ok(playground)
-    }
+enum ExecuteResult<S, F> {
+    Succ(S),
+    Fail(F),
 }
 
-impl<'de> Deserialize<'de> for GoalKind {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct GoalKindVisitor;
-
-        impl<'de> Visitor<'de> for GoalKindVisitor {
-            type Value = GoalKind;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("Any valid GoalKind!")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                match v {
-                    "command_executed" => Ok(GoalKind::CommandExecuted),
-                    "dir_entered" => Ok(GoalKind::DirEntered),
-                    "stdout" => Ok(GoalKind::StdOut),
-                    _ => Err(de::Error::custom("Not a valid goal kind!")),
-                }
-            }
-        }
-
-        deserializer.deserialize_str(GoalKindVisitor)
+fn copy_dir_all<P: AsRef<Path>, PP: AsRef<Path>>(src: P, dst: PP) -> io::Result<()> {
+    if dst.as_ref().exists() {
+        fs::remove_dir_all(&dst)?;
     }
-}
 
-impl<'de> Deserialize<'de> for Expectation {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct ExpectationVisitor;
-
-        impl<'de> Visitor<'de> for ExpectationVisitor {
-            type Value = Expectation;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("a sequence of string needed!")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let mut expectations = Vec::new();
-                while let Some(ele) = seq.next_element::<String>()? {
-                    match &*ele {
-                        "$YYYY-MM-DD$" => {
-                            let time = Utc::now();
-                            expectations.push(time.format("%Y-%m-%d").to_string());
-                        }
-                        _ => {
-                            expectations.push(ele);
-                        }
-                    }
-                }
-
-                Ok(Expectation(expectations))
-            }
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(&src)? {
+        let entry: DirEntry = entry?;
+        let ty: FileType = entry.file_type()?;
+        let target_path = dst.as_ref().join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &target_path)?;
+        } else {
+            fs::copy(entry.path(), target_path)?;
         }
-
-        deserializer.deserialize_str(ExpectationVisitor)
     }
+
+    Ok(())
 }
 
 // impl<'de> Deserialize<'de> for Goal {

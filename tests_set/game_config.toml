@@ -1,13 +1,13 @@
 game_order = [0]
-game_description = "欢迎使用北理网协2025百团招新终端操作小游戏！"
+game_description = "恭喜你到达了最终关卡！邪恶的树莓娘在此设下了重重机关，破解它们，拯救自己的电脑！"
 
 [[command_hints]]
 name = "ls"
-hint = "列出工作目录下的所有文件"
+hint = "列出当前目录下的所有文件"
 
 [[command_hints]]
 name = "cd"
-hint = "改变工作目录"
+hint = "改变当前目录"
 
 [[command_hints]]
 name = "echo"
@@ -15,7 +15,7 @@ hint = "向终端打印文字"
 
 [[commmand_hints]]
 name = "pwd"
-hint = "Print working directory"
+hint = "打印当前目录位置"
 
 [[game]]
 id = 0

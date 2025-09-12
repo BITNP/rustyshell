@@ -22,6 +22,7 @@ fn main() -> io::Result<()> {
     let game_config_path = "./game_config.toml";
 
     let mut player: GamePlayer = GamePlayer::build_from_config(game_config_path)?;
+    player.print_desc();
     while player.play_next().is_ok() {}
     println!("{}", t!("pass_all_game"));
 

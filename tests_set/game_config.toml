@@ -1,5 +1,6 @@
-game_order = [0]
-game_description = "恭喜你到达了最终关卡！邪恶的树莓娘在此设下了重重机关，破解它们，拯救自己的电脑！"
+game_order = [0, 1]
+game_description = "恭喜你到达了最终关卡！邪恶的树莓娘在此设下了重重机关，并将你的电脑切换成为了Ubuntu！破解机关，拯救自己的电脑！"
+is_desc_shown = false
 
 [[command_hints]]
 name = "ls"
@@ -17,11 +18,29 @@ hint = "向终端打印文字"
 name = "pwd"
 hint = "打印当前目录位置"
 
+[[command_hints]]
+name = "python3"
+hint = "使用'python3 文件名'以运行python文件"
+
+[[command_hints]]
+name = "java"
+hint = "单独的java文件可以使用'java 文件名'的指令来执行"
+
+[[command_hints]]
+name = "g++"
+hint = "使用'g++ 文件名'编译cpp文件。默认编译结果叫'a.out'，使用'./a.out'进行运行"
+
 [[game]]
 id = 0
-description = "第一个游戏用于练习查看目录中的文件以及目录间切换"
+description = "首先，我们需要了解我们身处何处"
 available_command = ["ls", "cd", "echo", "pwd"]
 environment = { dir = "set1", restore = true }
+
+[[game.game_item]]
+description = "请使用pwd指令获取自己的位置！"
+hint = "输入pwd后回车，以执行pwd指令！"
+hint_command = ["pwd"]
+goal = { kind = "command_executed", expectation = ["pwd"] }
 
 [[game.game_item]]
 description = "你现在需要知道当前目录下有什么文件"
@@ -30,13 +49,43 @@ hint_command = ["ls"]
 goal = { kind = "command_executed", expectation = ["ls", "ls -a"] }
 
 [[game.game_item]]
-description = "请进入名字最长的文件夹！"
+description = "根据指示，进入正确的文件夹"
 hint = "使用'cd'命令来切换当前所在目录。比如'cd a'可以进入名为a的文件夹"
 hint_command = ["cd"]
-goal = { kind = "dir_entered", expectation = ["BITNP"]}  # MAKE SURE that the longest-name folder is BITNP
+goal = { kind = "dir_entered", expectation = ["BITNP"] }  # MAKE SURE that the longest-name folder is BITNP
 
 [[game.game_item]]
 description = """真棒！让我们看看当前文件夹下有没有叫做“Miss. Shu Meiniang”的文件，然后告诉使用“true”或者“false”告诉中终端！"""
 hint = "要想知道当前目录下有什么文件，可以使用指令'ls'；要想给终端打印一些消息，请使用指令'echo'，比如'echo a'就打印一个a给终端"
 hint_command = ["ls", "echo"]
-goal = { kind = "stdout", expectation = ["true"]}
+goal = { kind = "stdout", expectation = ["true"] }
+
+[[game]]
+id = 1
+description = "树莓娘被你发现了！她现在躲在了若干程序中，运行它们，获得线索！"
+available_command = ["python3", "java", "g++", "ls", "echo", "./a.out"]
+environment = { dir = "set2", restore = true }
+
+[[game.game_item]]
+description = "让我们看看有什么可以运行的程序吧！"
+hint = "使用ls来查看当前目录有什么文件"
+hint_command = ["ls"]
+goal = { kind = "command_executed", expectation = ["ls", "ls - a"] }
+
+[[game.game_item]]
+description = "我们先来试试python脚本吧，记得使用python3哦！"
+hint = "使用python3运行目录中的python脚本！如果不会操作，请输入help"
+hint_command = ["python3"]
+goal = { kind = "command_executed", expectation = ["python3 tryit.py"] }
+
+[[game.game_item]]
+description = "根据输出的提示，继续尝试吧！"
+hint = "运行目录中的java文件吧！"
+hint_command = ["java"]
+goal = { kind = "command_executed", expectation = ["java tryit.java"] }
+
+[[game.game_item]]
+description = "根据输出的提示，继续尝试吧！"
+hint = "三个文件分别是python、java和C++语言，只有C++是没有垃圾回收机制的。所以，请编译运行cpp文件。如果不会操作，请输入help"
+hint_command = ["g++", "./a.out"]
+goal = { kind = "command_executed", expectation = ["./a.out"] }

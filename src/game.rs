@@ -35,10 +35,10 @@ lazy_static! {
 #[derive(Deserialize)]
 struct Playground {
     game_order: Vec<usize>,
-    #[warn(dead_code)]
     game_description: String,
     game: Vec<Game>,
     command_hints: Vec<CommandHint>,
+    is_desc_shown: bool,
 }
 
 impl Playground {
@@ -55,6 +55,13 @@ impl Playground {
         let mut guard = COMMAND_HINTS.lock().unwrap();
         *guard = playground.command_hints.clone();
         Ok(playground)
+    }
+    
+    pub fn print_desc(&mut self) {
+        if !self.is_desc_shown {
+            println!("{}", self.game_description);
+        }
+        self.is_desc_shown = true;
     }
 }
 
@@ -379,6 +386,10 @@ impl GamePlayer {
         }
 
         Ok(())
+    }
+    
+    pub fn print_desc(&mut self) {
+        self.play_ground.print_desc();
     }
 }
 
